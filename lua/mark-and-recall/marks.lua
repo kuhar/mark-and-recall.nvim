@@ -116,6 +116,7 @@ function M.has_mark_at(file_path, line)
 end
 
 --- Add a mark at the current cursor position.
+--- When no name is given, auto-names with @symbol if LSP provides one.
 --- @param opts? { name: string|nil, prepend: boolean|nil }
 function M.add_mark(opts)
   opts = opts or {}
@@ -129,10 +130,20 @@ function M.add_mark(opts)
     return
   end
 
+  -- Auto-name with @symbol when no explicit name given
+  local name = opts.name
+  if not name then
+    local lsp = require("mark-and-recall.lsp")
+    local symbol = lsp.get_symbol_at_cursor(bufnr, line)
+    if symbol then
+      name = "@" .. symbol
+    end
+  end
+
   local display_path = M.relative_path(file_path)
   local entry
-  if opts.name then
-    entry = opts.name .. ": " .. display_path .. ":" .. line
+  if name then
+    entry = name .. ": " .. display_path .. ":" .. line
   else
     entry = display_path .. ":" .. line
   end
@@ -341,6 +352,69 @@ function M.update_symbol_marks()
   end
 
   vim.notify(updated .. " symbol mark(s) updated", vim.log.levels.INFO)
+end
+
+--- Interactively select a marks file. Updates config and reinitializes.
+function M.select_marks_file()
+  local cwd = vim.fn.getcwd()
+  local current = M.config.marks_file
+
+  -- Find existing .md files in the workspace (up to 20)
+  local md_files = vim.fn.globpath(cwd, "**/*.md", false, true)
+  -- Filter to reasonable candidates, make relative
+  local candidates = {}
+  for _, f in ipairs(md_files) do
+    local rel = f:sub(#cwd + 2)
+    -- Skip node_modules and hidden dirs (except .vscode, .cursor, etc.)
+    if not rel:match("^node_modules/") and not rel:match("/node_modules/") then
+      if rel ~= current then
+        candidates[#candidates + 1] = rel
+      end
+    end
+  end
+  table.sort(candidates)
+
+  -- Build choice list
+  local choices = {}
+  choices[#choices + 1] = { label = "Current: " .. current, value = nil }
+  choices[#choices + 1] = { label = "Enter path manually...", value = "__manual__" }
+  choices[#choices + 1] = { label = "Reset to default (marks.md)", value = "marks.md" }
+  for _, c in ipairs(candidates) do
+    choices[#choices + 1] = { label = c, value = c }
+  end
+
+  local labels = {}
+  for _, c in ipairs(choices) do
+    labels[#labels + 1] = c.label
+  end
+
+  vim.ui.select(labels, { prompt = "Select marks file:" }, function(selected, idx)
+    if not selected or not idx then return end
+
+    local choice = choices[idx]
+    if not choice.value then return end -- "Current" selected, no-op
+
+    if choice.value == "__manual__" then
+      vim.ui.input({ prompt = "Marks file path: ", default = current }, function(input)
+        if not input or input == "" then return end
+        M._apply_marks_file(input)
+      end)
+    else
+      M._apply_marks_file(choice.value)
+    end
+  end)
+end
+
+--- Apply a new marks file path: update config and re-run setup.
+--- @param new_path string
+function M._apply_marks_file(new_path)
+  M.config.marks_file = new_path
+  M.invalidate_cache()
+  -- Re-run setup to recreate watcher, signs, tracking for the new file
+  local init = require("mark-and-recall")
+  init.config.marks_file = new_path
+  init.setup(init.config)
+  vim.notify("Marks file set to: " .. new_path, vim.log.levels.INFO)
 end
 
 return M

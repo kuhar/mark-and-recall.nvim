@@ -50,6 +50,7 @@ function M.setup(opts)
     local n = tonumber(cmd_opts.args)
     if n then nav.recall_by_index(n) end
   end, { nargs = 1, desc = "Jump to mark by number" })
+  vim.api.nvim_create_user_command("MarkSelectFile", function() marks.select_marks_file() end, { desc = "Select marks file" })
   vim.api.nvim_create_user_command("MarkOpen", function()
     local path = marks.get_marks_file_path()
     if not vim.uv.fs_stat(path) then
