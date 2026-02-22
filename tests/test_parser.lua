@@ -281,6 +281,54 @@ describe("parseMarksFile", function()
     end)
   end)
 
+  describe("merge_pending_adjustments", function()
+    it("merges a single edit into empty pending", function()
+      local pending = {}
+      -- Marks at lines 5 and 10, insert 2 lines at 0-based 3
+      local adjustments = parser.compute_line_adjustments({ 5, 10 }, 3, 3, 5)
+      parser.merge_pending_adjustments(pending, { 5, 10 }, adjustments)
+      assert_eq(pending[5].current, 7)
+      assert_eq(pending[10].current, 12)
+    end)
+
+    it("merges two sequential edits on the same mark", function()
+      local pending = {}
+      -- Edit 1: insert 2 lines at 0-based line 3 → mark at 5 shifts to 7
+      local adj1 = parser.compute_line_adjustments({ 5, 10 }, 3, 3, 5)
+      parser.merge_pending_adjustments(pending, { 5, 10 }, adj1)
+      assert_eq(pending[5].current, 7)
+      assert_eq(pending[10].current, 12)
+
+      -- Edit 2: insert 1 line at 0-based line 4 → current 7 shifts to 8, current 12 shifts to 13
+      local current_lines = { pending[5].current, pending[10].current } -- {7, 12}
+      local adj2 = parser.compute_line_adjustments(current_lines, 4, 4, 5)
+      parser.merge_pending_adjustments(pending, { 5, 10 }, adj2)
+      assert_eq(pending[5].current, 8)
+      assert_eq(pending[10].current, 13)
+    end)
+
+    it("handles deletion followed by insertion", function()
+      local pending = {}
+      -- Mark at line 10, delete lines 3-5 (0-based: first=2, last=5, new_last=2)
+      local adj1 = parser.compute_line_adjustments({ 10 }, 2, 5, 2)
+      parser.merge_pending_adjustments(pending, { 10 }, adj1)
+      assert_eq(pending[10].current, 7) -- 10 - 3 = 7
+
+      -- Insert 1 line at 0-based line 1 → current 7 shifts to 8
+      local adj2 = parser.compute_line_adjustments({ 7 }, 1, 1, 2)
+      parser.merge_pending_adjustments(pending, { 10 }, adj2)
+      assert_eq(pending[10].current, 8)
+    end)
+
+    it("preserves unaffected pending entries", function()
+      local pending = { [5] = { current = 7 } }
+      -- Edit only affects lines after 10, mark at current line 7 is not shifted
+      local adj = parser.compute_line_adjustments({ 7 }, 10, 10, 12)
+      parser.merge_pending_adjustments(pending, { 5 }, adj)
+      assert_eq(pending[5].current, 7) -- unchanged
+    end)
+  end)
+
   describe("edge cases", function()
     it("handles whitespace around separators", function()
       local content = "  mymark:   src/file.ts:10  "

@@ -164,6 +164,37 @@ function M.compute_line_adjustments(mark_lines, first_line, last_line, new_last_
   return result
 end
 
+--- Merge a set of line adjustments into existing pending updates.
+--- Pure Lua — no vim.* dependencies.
+--- @param pending table<number, {current: number}> existing pending: original_line → {current}
+--- @param mark_lines number[] 1-based original mark lines for the file
+--- @param adjustments table<number, number> old_current → new_current from compute_line_adjustments
+--- @return table<number, {current: number}> updated pending table (mutated in place and returned)
+function M.merge_pending_adjustments(pending, mark_lines, adjustments)
+  -- Build reverse map: current_line → original_line
+  local current_to_original = {}
+  for orig, entry in pairs(pending) do
+    current_to_original[entry.current] = orig
+  end
+
+  -- Also track marks with no pending entry (original == current)
+  for _, ml in ipairs(mark_lines) do
+    if not pending[ml] then
+      current_to_original[ml] = ml
+    end
+  end
+
+  -- Apply adjustments: key is old current line → new current line
+  for old_current, new_current in pairs(adjustments) do
+    local original = current_to_original[old_current]
+    if original then
+      pending[original] = { current = new_current }
+    end
+  end
+
+  return pending
+end
+
 --- Rewrite the trailing line number in a mark line string.
 --- Pure Lua — no vim.* dependencies.
 --- @param line_str string e.g. "@std::chrono: src/time.cpp:5"

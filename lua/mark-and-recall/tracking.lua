@@ -90,33 +90,19 @@ function M._on_lines_changed(_buf, file_path, first, last, new_last)
   local adjustments = parser.compute_line_adjustments(mark_lines, first, last, new_last)
   if not next(adjustments) then return end
 
-  -- Merge into pending updates
   if not M._pending_updates[file_path] then
     M._pending_updates[file_path] = {}
   end
 
-  -- Build reverse map: current_line → original_line for existing pending entries
-  local current_to_original = {}
-  for orig, entry in pairs(M._pending_updates[file_path]) do
-    current_to_original[entry.current] = orig
-  end
-
-  -- Also track marks with no pending entry (original == current)
+  -- Collect original mark lines for this file
+  local original_mark_lines = {}
   for _, mark in ipairs(marks) do
     if mark.file_path == file_path then
-      if not M._pending_updates[file_path][mark.line] then
-        current_to_original[mark.line] = mark.line
-      end
+      original_mark_lines[#original_mark_lines + 1] = mark.line
     end
   end
 
-  -- Apply adjustments: key in adjustments is old current line → new current line
-  for old_current, new_current in pairs(adjustments) do
-    local original = current_to_original[old_current]
-    if original then
-      M._pending_updates[file_path][original] = { current = new_current }
-    end
-  end
+  parser.merge_pending_adjustments(M._pending_updates[file_path], original_mark_lines, adjustments)
 
   -- Schedule debounced flush
   M._schedule_flush()
