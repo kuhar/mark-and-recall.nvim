@@ -76,6 +76,15 @@ function M.setup(opts)
     end,
   })
 
+  vim.api.nvim_create_autocmd("DirChanged", {
+    group = group,
+    callback = function()
+      marks.invalidate_cache()
+      nav._last_index = nil
+      signs.update_all_signs()
+    end,
+  })
+
   -- File watcher: watch the parent directory, filter to marks filename
   local marks_dir = vim.fn.fnamemodify(marks_path, ":h")
 

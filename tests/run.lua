@@ -89,15 +89,9 @@ local plugin_root = script_dir:match("(.*/)[^/]*/")
 -- Add the plugin's lua directory to package.path
 package.path = plugin_root .. "lua/?.lua;" .. plugin_root .. "lua/?/init.lua;" .. package.path
 
--- Collect test files
-local test_files = {}
-local handle = io.popen('ls "' .. script_dir .. '"test_*.lua 2>/dev/null')
-if handle then
-  for line in handle:lines() do
-    test_files[#test_files + 1] = line
-  end
-  handle:close()
-end
+-- Collect test files using vim.fn.glob (available under nvim --headless)
+local test_files = vim.fn.glob(script_dir .. "test_*.lua", false, true)
+table.sort(test_files)
 
 if #test_files == 0 then
   io.write("No test files found in " .. script_dir .. "\n")
