@@ -359,41 +359,34 @@ function M.select_marks_file()
   local cwd = vim.fn.getcwd()
   local current = M.config.marks_file
 
-  -- Find existing .md files in the workspace (up to 20)
-  local md_files = vim.fn.globpath(cwd, "**/*.md", false, true)
-  -- Filter to reasonable candidates, make relative
+  -- Find existing .md files in the workspace
+  local md_files = vim.fs.find(function(name, path)
+    return name:match("%.md$") and not path:match("node_modules")
+  end, { path = cwd, limit = 20, type = "file" })
+  -- Make relative, skip current
   local candidates = {}
   for _, f in ipairs(md_files) do
-    local rel = f:sub(#cwd + 2)
-    -- Skip node_modules and hidden dirs (except .vscode, .cursor, etc.)
-    if not rel:match("^node_modules/") and not rel:match("/node_modules/") then
-      if rel ~= current then
-        candidates[#candidates + 1] = rel
-      end
+    local rel = vim.fn.fnamemodify(f, ":.")
+    if rel ~= current then
+      candidates[#candidates + 1] = rel
     end
   end
   table.sort(candidates)
 
   -- Build choice list
   local choices = {}
-  choices[#choices + 1] = { label = "Current: " .. current, value = nil }
   choices[#choices + 1] = { label = "Enter path manually...", value = "__manual__" }
   choices[#choices + 1] = { label = "Reset to default (marks.md)", value = "marks.md" }
   for _, c in ipairs(candidates) do
     choices[#choices + 1] = { label = c, value = c }
   end
 
-  local labels = {}
-  for _, c in ipairs(choices) do
-    labels[#labels + 1] = c.label
-  end
+  local labels = vim.tbl_map(function(c) return c.label end, choices)
 
-  vim.ui.select(labels, { prompt = "Select marks file:" }, function(selected, idx)
+  vim.ui.select(labels, { prompt = "Select marks file (current: " .. current .. "):" }, function(selected, idx)
     if not selected or not idx then return end
 
     local choice = choices[idx]
-    if not choice.value then return end -- "Current" selected, no-op
-
     if choice.value == "__manual__" then
       vim.ui.input({ prompt = "Marks file path: ", default = current }, function(input)
         if not input or input == "" then return end
@@ -408,7 +401,6 @@ end
 --- Apply a new marks file path: update config and re-run setup.
 --- @param new_path string
 function M._apply_marks_file(new_path)
-  M.config.marks_file = new_path
   M.invalidate_cache()
   -- Re-run setup to recreate watcher, signs, tracking for the new file
   local init = require("mark-and-recall")
