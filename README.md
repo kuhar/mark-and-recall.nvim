@@ -82,7 +82,6 @@ Create a `marks.md` file in your workspace root:
 # Marks
 # Examples: name: path:line | @symbol: path:line | path:line
 
-tester: agents/llvm-tester.md:11
 @parseConfig: src/utils.ts:42
 src/helpers.ts:18
 ```
